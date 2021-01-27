@@ -88,3 +88,6 @@ def main():
     output_path = args.model_output_path
 
     train_and_evaluate(batch_size, epochs, job_dir, output_path)
+
+if __name__ == "__main__":
+    main()
