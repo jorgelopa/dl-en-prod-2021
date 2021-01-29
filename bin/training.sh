@@ -2,7 +2,7 @@
 
 EPOCHS=30
 BATCH_SIZE=1024
-BUCKET=iht-20200122-kschool
+BUCKET=jal-20210126-kschool
 
 gcloud ai-platform jobs submit training mnist_iht_`date +"%s"` \
   --python-version 3.7 \
