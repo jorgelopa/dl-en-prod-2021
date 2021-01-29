@@ -2,6 +2,8 @@
 
 import argparse
 import logging.config
+import os
+import time
 
 from tensorflow.keras import datasets
 from tensorflow.keras import models
@@ -11,15 +13,13 @@ from tensorflow.keras import optimizers
 from tensorflow.keras import losses
 from tensorflow.keras import metrics
 from tensorflow.keras import utils
+from tensorflow.keras import callbacks
+
+from . import __version__
 
 
-
-LOGGER = logging.getlogger()
-
-
-
-
-
+LOGGER = logging.getLogger()
+VERSION = __version__
 
 def _download_data():
     LOGGER.info("Downloading data...")
@@ -29,22 +29,22 @@ def _download_data():
     return x_train, y_train, x_test, y_test
 
 
-def _preprocess_data(x,y):
-   
-    x = x/255
+def _preprocess_data(x, y):
+    LOGGER.info("Transforming data")
+    x = x / 255.0
     y = utils.to_categorical(y)
     return x,y
 
- 
+
 def _build_model():
     m = models.Sequential()
 
-    m.add(layers.Input((28,28), name = 'my_input_layer'))
+    m.add(layers.Input((28,28), name='my_input_layer'))
     m.add(layers.Flatten())
     m.add(layers.Dense(128, activation=activations.relu))
-    m.add(layers.Dense(64,activation=activations.relu))
-    m.add(layers.Dense(32,activation=activations.relu))
-    m.add(layers.Dense(10,activation=activations.softmax))
+    m.add(layers.Dense(64, activation=activations.relu))
+    m.add(layers.Dense(32, activation=activations.relu))
+    m.add(layers.Dense(10, activation=activations.softmax))
 
     return m
 
@@ -54,31 +54,41 @@ def train_and_evaluate(batch_size, epochs, job_dir, output_path):
     x_train, y_train, x_test, y_test = _download_data()
 
     # Preprocess the data
-    x_train, y_train = _preprocess_data(x_trin, y_train)
+    x_train, y_train = _preprocess_data(x_train, y_train)
     x_test, y_test = _preprocess_data(x_test, y_test)
 
-    #Build the model
+    # Build the model
     model = _build_model()
-    model.compile(loss=categorical_crossentropy,
-                    optimizer=Adam(),
-                    metrics=[metrics.categorical_Accuracy])
+    model.compile(loss=losses.categorical_crossentropy,
+                  optimizer=optimizers.Adam(),
+                  metrics=[metrics.categorical_accuracy])
 
     # Train the model
-    model.fit(x_train, y_train, epochs = epochs, batch_size = batch_size)
+    # Use tensorboard in the Cloud Shell without slash at the end
+    # e.g. tensorboard --logdir gs://BUCKET/tmp/logs  <-- no slash
+    logdir = os.path.join(job_dir, "logs/scalars/" + time.strftime("%Y%m%d-%H%M%S"))
+    tb_callback = callbacks.TensorBoard(log_dir=logdir)
+    model.fit(x_train, 
+              y_train, 
+              epochs=epochs, 
+              batch_size=batch_size, 
+              callbacks=[tb_callback])
 
     # Evaluate the model
     loss_value, accuracy = model.evaluate(x_test, y_test)
-    LOGGER.info("   ***   LOSS VALUE %f   ACCURACY  %.4f" % (loss_value , accuracy))
+    LOGGER.info("  *** LOSS VALUE:  %f     ACCURACY: %.4f" % (loss_value, accuracy))
 
-
+    # Save model in TF SavedModel Format
+    model_dir = os.path.join(output_path, VERSION)
+    models.save_model(model, model_dir, save_format='tf')
 
 def main():
     """Entry point for your module."""
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch-size', type=int, help='Batch size for the training')
-    parser.add_argument('--epochs', type=int , help='Number of epochs for the training')
-    parser.add_argument('--job-dir', default=None,required=False, help='Option for AI Platform')
-    parser.add_argument('--module-output-path', help='Path to write the SaveModel format)
+    parser.add_argument('--epochs', type=int, help='Number of epochs for the training')
+    parser.add_argument('--job-dir', default=None, required=False, help='Option for AI Platform')
+    parser.add_argument('--model-output-path', help='Path to write the SaveModel format')
 
     args = parser.parse_args()
 
